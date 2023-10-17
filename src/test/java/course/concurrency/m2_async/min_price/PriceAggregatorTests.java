@@ -222,4 +222,23 @@ public class PriceAggregatorTests {
         assertEquals(expectedMinPrice, min, "Minimal price is evaluated incorrectly");
         assertTrue((end - start) < SLA, "Method evaluated too long");
     }
+
+    @Test
+    void shouldReturnMaxValueWhenAllShopsRespondWithMaxValue() {
+        int shopCount = 50;
+        PriceRetriever priceRetriever = mock(PriceRetriever.class);
+        when(priceRetriever.getPrice(anyLong(), anyLong())).thenReturn(Double.MAX_VALUE);
+        priceAggregator.setPriceRetriever(priceRetriever);
+        Set<Long> shops = LongStream.range(0, shopCount).boxed().collect(toSet());
+        priceAggregator.setShops(shops);
+
+        double expectedMin = Double.MAX_VALUE;
+
+        long start = System.currentTimeMillis();
+        double min = priceAggregator.getMinPrice(randomItemId);
+        long end = System.currentTimeMillis();
+
+        assertEquals(expectedMin, min, "Minimal price is evaluated incorrectly");
+        assertTrue((end - start) < SLA, "Method evaluated too long");
+    }
 }

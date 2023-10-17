@@ -2,8 +2,8 @@ package course.concurrency.m2_async.cf.min_price;
 
 import java.util.Collection;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 
-import static java.lang.Math.max;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.concurrent.CompletableFuture.supplyAsync;
 import static java.util.concurrent.Executors.newFixedThreadPool;
@@ -11,7 +11,10 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 public class PriceAggregator {
 
+    private static final int THREAD_COUNT = 100;
+
     private PriceRetriever priceRetriever = new PriceRetriever();
+    private final ExecutorService threadPool = newFixedThreadPool(THREAD_COUNT);
 
     public void setPriceRetriever(PriceRetriever priceRetriever) {
         this.priceRetriever = priceRetriever;
@@ -24,20 +27,29 @@ public class PriceAggregator {
     }
 
     public double getMinPrice(long itemId) {
-        final var threadPool = newFixedThreadPool(max(shopIds.size(), 100));
-        final var minPrice = shopIds.stream()
+        return shopIds.stream()
             .map(shopId -> supplyAsync(() -> priceRetriever.getPrice(itemId, shopId), threadPool)
                 .orTimeout(2950, MILLISECONDS)
                 .exceptionally(this::logAndGetDefaultPrice))
-            .reduce((first, second) -> first.thenCombine(second, Math::min))
-            .orElse(completedFuture(Double.MAX_VALUE))
+            .reduce((first, second) -> first.thenCombine(second, this::minWithNanLast))
+            .orElse(completedFuture(Double.NaN))
             .join();
-
-        return minPrice == Double.MAX_VALUE ? Double.NaN : minPrice;
     }
 
     private double logAndGetDefaultPrice(Throwable ex) {
         ex.printStackTrace();
-        return Double.MAX_VALUE;
+        return Double.NaN;
+    }
+
+    private Double minWithNanLast(Double first, Double second) {
+        if (first.isNaN()) {
+            return second;
+        }
+
+        if (second.isNaN()) {
+            return first;
+        }
+
+        return Math.min(first, second);
     }
 }
